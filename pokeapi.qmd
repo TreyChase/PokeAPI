@@ -1,0 +1,14 @@
+---
+title: "PokeAPI"
+author: "Trey Chase"
+format: pdf
+editor: visual
+---
+
+## Introduction
+
+
+## Scraping from PokeAPI
+
+## Functions
+
