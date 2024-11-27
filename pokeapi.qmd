@@ -9,79 +9,118 @@ editor: visual
 
 # Scraping from PokeAPI
 
-## Libraries
-
-```{r libraries}
-library(purrr)
-library(tidyverse)
-```
-
 ```{r fetch data}
 library(httr2)
 library(dplyr)
 library(purrr)
 
-# Function to fetch Pokémon attributes in wide format
-fetch_pokemon_attributes <- function(limit = 151, offset = 0) {
-  # Define the API URL
-  url <- paste0("https://pokeapi.co/api/v2/pokemon?limit=", limit, "&offset=", offset)
-  
-  # Fetch the list of Pokémon
-  response <- request(url) |> req_perform()
-  data <- response |> resp_body_json()
-  pokemon_list <- as.data.frame(data$results)
-  
-  # Helper function to fetch individual Pokémon details
-  fetch_individual_pokemon <- function(api_url, name) {
+# Function to fetch attributes for multiple Pokémon
+fetch_pokemon_attributes <- function(api_urls) {
+  # Helper function for fetching a single Pokémon
+  fetch_single_pokemon <- function(api_url) {
+    # Ensure the URL is a single string
+    if (length(api_url) != 1) {
+      stop("Each API call must have a single URL.")
+    }
+    
     # Perform API request
     pokemon_response <- request(api_url) |> req_perform()
     pokemon_data <- pokemon_response |> resp_body_json()
     
-    # Extract stats as individual columns
+    # Extract stats
     stats <- setNames(
       map_dbl(pokemon_data$stats, ~ .x$base_stat),
       map_chr(pokemon_data$stats, ~ .x$stat$name)
     )
     
-    # Extract first-level attributes and flatten relevant nested fields
+    # Return the Pokémon's details as a tibble
     tibble(
-      name = name,
+      name = pokemon_data$name,
       id = pokemon_data$id,
       base_experience = pokemon_data$base_experience,
       height = pokemon_data$height,
       weight = pokemon_data$weight,
-      is_default = pokemon_data$is_default,
-      abilities = paste(map_chr(pokemon_data$abilities, ~ .x$ability$name), collapse = ", "),
-      types = paste(map_chr(pokemon_data$types, ~ .x$type$name), collapse = ", "),
-      sprite = pokemon_data$sprites$front_default,
+      hp = stats["hp"],
+      attack = stats["attack"],
+      defense = stats["defense"],
+      special_attack = stats["special-attack"],
+      special_defense = stats["special-defense"],
+      speed = stats["speed"]
+    )
+  }
+  
+  # Process all Pokémon URLs individually
+  all_pokemon <- map_dfr(api_urls, fetch_single_pokemon)
+  return(all_pokemon)
+}
+
+# Example usage with multiple Pokémon URLs
+pokemon_urls <- c(
+  "https://pokeapi.co/api/v2/pokemon/1",
+  "https://pokeapi.co/api/v2/pokemon/2",
+  "https://pokeapi.co/api/v2/pokemon/3"
+)
+
+multiple_pokemon <- fetch_pokemon_attributes(pokemon_urls)
+print(multiple_pokemon)
+```
+
+
+```{r}
+library(httr2)
+library(dplyr)
+library(purrr)
+
+# Function to fetch attributes for multiple Pokémon dynamically
+fetch_pokemon_attributes <- function(num_pokemon) {
+  # Generate the URLs for the specified number of Pokémon
+  base_url <- "https://pokeapi.co/api/v2/pokemon/"
+  pokemon_urls <- paste0(base_url, seq_len(num_pokemon))
+  
+  # Helper function for fetching a single Pokémon
+  fetch_single_pokemon <- function(api_url) {
+    # Perform API request
+    pokemon_response <- request(api_url) |> req_perform()
+    pokemon_data <- pokemon_response |> resp_body_json()
+    
+    # Extract stats
+    stats <- setNames(
+      map_dbl(pokemon_data$stats, ~ .x$base_stat),
+      map_chr(pokemon_data$stats, ~ .x$stat$name)
+    )
+    
+    # Extract sprites
+    sprites <- pokemon_data$sprites
+    
+    # Return the Pokémon's details as a tibble
+    tibble(
+      name = pokemon_data$name,
+      id = pokemon_data$id,
+      base_experience = pokemon_data$base_experience,
+      height = pokemon_data$height,
+      weight = pokemon_data$weight,
       hp = stats["hp"],
       attack = stats["attack"],
       defense = stats["defense"],
       special_attack = stats["special-attack"],
       special_defense = stats["special-defense"],
       speed = stats["speed"],
-      held_items = if (length(pokemon_data$held_items) > 0) {
-        paste(map_chr(pokemon_data$held_items, ~ .x$item$name), collapse = ", ")
-      } else {
-        NA
-      }
+      art = sprites$other$`official-artwork`$front_default,
+      sprite = sprites$front_default,
+      shiny_sprite = sprites$front_shiny
     )
   }
   
-  # Fetch attributes for all Pokémon
-  all_pokemon_attributes <- pokemon_list |> 
-    mutate(attributes = map2(url, name, fetch_individual_pokemon)) |> 
-    select(attributes) |> 
-    unnest(attributes)
-  
-  # Return the wide-format data frame
-  return(all_pokemon_attributes)
+  # Process all Pokémon URLs individually
+  all_pokemon <- map_dfr(pokemon_urls, fetch_single_pokemon)
+  return(all_pokemon)
 }
+```
 
-# Example usage
-pokemon_data <- fetch_pokemon_attributes(limit = 10, offset = 0) # Fetch first 10 Pokémon for demonstration
-print(pokemon_data)
+## Example Call
 
+```{r}
+fetch_pokemon_attributes(100)
 ```
 
 
