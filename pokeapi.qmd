@@ -70,6 +70,8 @@ print(multiple_pokemon)
 library(httr2)
 library(dplyr)
 library(purrr)
+library(stringr)
+library(furrr) # For parallel processing
 
 # Function to fetch attributes for multiple Pokémon dynamically
 fetch_pokemon_attributes <- function(num_pokemon) {
@@ -94,33 +96,116 @@ fetch_pokemon_attributes <- function(num_pokemon) {
     
     # Return the Pokémon's details as a tibble
     tibble(
-      name = pokemon_data$name,
+      name = str_to_title(pokemon_data$name),
       id = pokemon_data$id,
-      base_experience = pokemon_data$base_experience,
-      height = pokemon_data$height,
-      weight = pokemon_data$weight,
+      base_experience = as.numeric(pokemon_data$base_experience),
+      height = as.numeric(pokemon_data$height),
+      weight = as.numeric(pokemon_data$weight),
       hp = stats["hp"],
-      attack = stats["attack"],
-      defense = stats["defense"],
-      special_attack = stats["special-attack"],
-      special_defense = stats["special-defense"],
-      speed = stats["speed"],
+      attack = as.numeric(stats["attack"]),
+      defense = as.numeric(stats["defense"]),
+      special_attack = as.numeric(stats["special-attack"]),
+      special_defense = as.numeric(stats["special-defense"]),
+      speed = as.numeric(stats["speed"]),
       art = sprites$other$`official-artwork`$front_default,
       sprite = sprites$front_default,
       shiny_sprite = sprites$front_shiny
     )
   }
   
-  # Process all Pokémon URLs individually
-  all_pokemon <- map_dfr(pokemon_urls, fetch_single_pokemon)
+  # Set up parallel backend
+  plan(multisession) # Use multiple sessions for parallel processing
+  
+  # Process all Pokémon URLs in parallel
+  all_pokemon <- future_map_dfr(pokemon_urls, fetch_single_pokemon)
+  
   return(all_pokemon)
 }
 ```
 
+
 ## Example Call
 
+
 ```{r}
-fetch_pokemon_attributes(100)
+pokemon_df = fetch_pokemon_attributes(20)
+
+pokemon_df
+```
+
+```{r}
+str(pokemon_df)
+```
+
+## Base Stats
+
+```{r plot base stats}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+plot_base_stats <- function(pokemon, pokemon_data) {
+  # Filtering the dataset for the specified Pokémon and selecting base stats
+  pokemon_stats <- pokemon_data |>
+    filter(name == pokemon) |>
+    select(
+      attack, 
+      defense,
+      special_attack,
+      special_defense,
+      speed
+    )
+  
+  # Preparing base stats for plotting
+  stats_longer <- pokemon_stats |>
+    pivot_longer(
+      cols = everything(),
+      names_to = "stat",
+      values_to = "value"
+    ) |>
+    mutate(
+      fill_color = case_when(
+        value <= 50 ~ "red",
+        value > 50 & value <= 75 ~ "darkorange",
+        value > 75 & value < 100 ~ "greenyellow",
+        value >= 100 & value <= 150 ~ "green",
+        value > 150 ~ "cyan"
+      )
+    )
+  
+  # Creating the plot
+  plt <- ggplot(stats_longer, aes(
+    x = value, 
+    y = factor(stat, levels = rev(c("attack", "defense", "special_attack", "special_defense", "speed"))), 
+    fill = fill_color # Map the fill color here
+  )) + 
+    geom_bar(stat = "identity") +
+    geom_text(aes(label = value), hjust = -0.1, fontface = "bold") +
+    scale_fill_identity() + # Use identity scale to apply custom colors
+    labs(
+      title = paste("Base Stats for", pokemon),
+      x = "Base Stat Value"
+    ) + 
+    theme_minimal() +
+    theme(plot.title = element_text(face = "bold"))
+  
+  return(plt)
+}
+
+# Example Pokémon data
+pokemon_df <- tibble(
+  name = c("Bulbasaur", "Charmander"),
+  attack = c(49, 52),
+  defense = c(49, 43),
+  special_attack = c(65, 60),
+  special_defense = c(65, 50),
+  speed = c(45, 65)
+)
+
+# Plot base stats for Bulbasaur
+plot_base_stats("Bulbasaur", pokemon_df)
+
+
 ```
 
 
