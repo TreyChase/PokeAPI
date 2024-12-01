@@ -5,6 +5,11 @@ format: pdf
 editor: visual
 ---
 
+```{r setup, include=FALSE, cache = TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
 # Introduction
 
 # Scraping from PokeAPI
@@ -142,6 +147,7 @@ str(pokemon_df)
 ```{r sql}
 library(DBI)
 library(RSQLite)
+library(future)
 
 # Database path
 db_path <- "pokemon_data.sqlite"
@@ -241,7 +247,7 @@ plot_base_stats <- function(pokemon, pokemon_data) {
       "speed" = "Speed"
     )) +
     scale_x_continuous(
-      limits = c(0, max(stats_longer$value) * 1.1), # Set dynamic limits
+      limits = c(0, 300), # Fixed x-axis scale to a maximum of 300
       expand = c(0, 0) # Remove extra padding
     ) +
     theme_minimal() +
@@ -249,6 +255,7 @@ plot_base_stats <- function(pokemon, pokemon_data) {
   
   return(plt)
 }
+
 
 plot_base_stats("Bulbasaur", pokemon_df)
 ```

@@ -1,19 +1,86 @@
+# Required Libraries
 library(shiny)
-library(tidyverse)
 library(DBI)
 library(RSQLite)
-library(ggplot2)
 library(magick)
+library(dplyr)
 
-# Accessing the QMD file (pokeapi.qmd)
-source(
-  knitr::purl("pokeapi.qmd", output = tempfile(), quiet = TRUE)
-)
+# Source the QMD file to access plot_base_stats
+source(knitr::purl("pokeapi.qmd", output = tempfile(), quiet = TRUE))
+
+# Helper Function: Get Regular Sprite
+get_pokemon_sprite <- function(pokemon, pokemon_data) {
+  pokemon_sprite <- pokemon_data |>
+    filter(name == pokemon) |>
+    select(sprite) |>
+    pull()
+  
+  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
+    stop("No sprite found for the specified Pokémon.")
+  }
+  
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_sprite)
+    },
+    error = function(e) {
+      stop("Failed to read the sprite. Check the file path or URL.")
+    }
+  )
+  
+  magick::image_scale(img, "500x500")
+}
+
+# Helper Function: Get Shiny Sprite
+get_pokemon_shiny_sprite <- function(pokemon, pokemon_data) {
+  pokemon_sprite <- pokemon_data |>
+    filter(name == pokemon) |>
+    select(shiny_sprite) |>
+    pull()
+  
+  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
+    stop("No sprite found for the specified Pokémon.")
+  }
+  
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_sprite)
+    },
+    error = function(e) {
+      stop("Failed to read the sprite. Check the file path or URL.")
+    }
+  )
+  
+  magick::image_scale(img, "500x500")
+}
+
+# Helper Function: Get Official Artwork
+get_pokemon_art <- function(pokemon, pokemon_data) {
+  pokemon_art <- pokemon_data |>
+    filter(name == pokemon) |>
+    select(art) |>
+    pull()
+  
+  if (is.null(pokemon_art) || pokemon_art == "") {
+    stop("No artwork found for the specified Pokémon.")
+  }
+  
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_art)
+    },
+    error = function(e) {
+      stop("Failed to read the image. Check the file path or URL.")
+    }
+  )
+  
+  magick::image_scale(img, "500x500")
+}
 
 # Database path
 db_path <- "pokemon_data.sqlite"
 
-# UI for the Shiny app
+# UI for the Shiny App
 ui <- fluidPage(
   titlePanel("Pokémon Explorer"),
   
@@ -22,30 +89,61 @@ ui <- fluidPage(
       selectizeInput(
         inputId = "pokemon",
         label = "Search and Select a Pokémon",
-        choices = NULL, # Dynamically populate choices later
+        choices = NULL, # Dynamically populated when the app starts
         selected = NULL,
-        options = list(placeholder = "Type to search Pokémon by name or ID")
-      )
+        options = list(placeholder = "Type to search Pokémon by name")
+      ),
+      actionButton(inputId = "fetchButton", label = "Fetch Pokémon Info")
     ),
     mainPanel(
-      tabsetPanel(
-        tabPanel("Base Stats", plotOutput("baseStatsPlot")),
-        tabPanel("Sprite", imageOutput("sprite")),
-        tabPanel("Shiny Sprite", imageOutput("shinySprite")),
-        tabPanel("Artwork", imageOutput("artwork"))
+      h4(textOutput("pokemonName"), align = "center"), # Subheader for Pokémon name
+      fluidRow(
+        column(
+          width = 4,
+          wellPanel(
+            div(
+              style = "display: flex; justify-content: center; align-items: center; height: 300px;",
+              imageOutput("artwork", width = "300px", height = "300px")
+            )
+          )
+        ),
+        column(
+          width = 8,
+          plotOutput("baseStatsPlot", height = "400px")
+        )
+      ),
+      fluidRow(
+        column(
+          width = 12,
+          div(
+            h4("Sprites", align = "center"), # Centered header above sprites
+            style = "margin-bottom: 10px;"
+          ),
+          wellPanel(
+            fluidRow(
+              column(
+                width = 6,
+                imageOutput("sprite", height = "200px")
+              ),
+              column(
+                width = 6,
+                imageOutput("shinySprite", height = "200px")
+              )
+            )
+          )
+        )
       )
     )
   )
 )
 
-# Server for the Shiny app
+# Server Logic for the Shiny App
 server <- function(input, output, session) {
-  # Dynamically populate the dropdown menu with Pokémon names and IDs
+  # Populate the dropdown menu with Pokémon names
   observe({
     conn <- dbConnect(SQLite(), db_path)
-    pokemon_choices <- dbGetQuery(conn, "SELECT id, name FROM pokemon ORDER BY id") %>%
-      mutate(display = paste(id, "-", name)) %>%
-      pull(display)
+    pokemon_choices <- dbGetQuery(conn, "SELECT name FROM pokemon ORDER BY id") %>%
+      pull(name)
     dbDisconnect(conn)
     
     updateSelectizeInput(
@@ -56,59 +154,59 @@ server <- function(input, output, session) {
     )
   })
   
-  # Reactive: Fetch Pokémon data for the selected Pokémon
-  selected_pokemon_data <- reactive({
+  # Fetch Pokémon data dynamically based on the action button click
+  selected_pokemon_data <- eventReactive(input$fetchButton, {
     req(input$pokemon) # Ensure a Pokémon is selected
-    
-    # Extract Pokémon name from "ID - Name" format
-    pokemon_name <- str_remove(input$pokemon, "^[0-9]+ - ")
-    
-    # Query Pokémon data from the database
     conn <- dbConnect(SQLite(), db_path)
-    pokemon_data <- dbGetQuery(conn, paste0(
-      "SELECT * FROM pokemon WHERE name = '", pokemon_name, "'"
-    ))
+    pokemon_data <- dbGetQuery(conn, paste0("SELECT * FROM pokemon WHERE name = '", input$pokemon, "'"))
     dbDisconnect(conn)
-    
     return(pokemon_data)
   })
   
-  # Base stats plot
+  # Render the Pokémon's Name as a Subheader
+  output$pokemonName <- renderText({
+    req(selected_pokemon_data())
+    pokemon_data <- selected_pokemon_data()
+    pokemon_data$name[1]
+  })
+  
+  # Render the Base Stats Plot using plot_base_stats from .qmd
   output$baseStatsPlot <- renderPlot({
+    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     plot_base_stats(pokemon_data$name[1], pokemon_data)
   })
   
-  # Sprite image
+  # Render the Regular Sprite
   output$sprite <- renderImage({
+    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     sprite <- get_pokemon_sprite(pokemon_data$name[1], pokemon_data)
     tmpfile <- tempfile(fileext = ".png")
-    image_write(sprite, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 500, height = 500)
+    magick::image_write(sprite, tmpfile)
+    list(src = tmpfile, contentType = "image/png", width = 200, height = 200)
   }, deleteFile = TRUE)
   
-  # Shiny sprite image
+  # Render the Shiny Sprite
   output$shinySprite <- renderImage({
+    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     shiny_sprite <- get_pokemon_shiny_sprite(pokemon_data$name[1], pokemon_data)
     tmpfile <- tempfile(fileext = ".png")
-    image_write(shiny_sprite, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 500, height = 500)
+    magick::image_write(shiny_sprite, tmpfile)
+    list(src = tmpfile, contentType = "image/png", width = 200, height = 200)
   }, deleteFile = TRUE)
   
-  # Artwork image
+  # Render the Artwork
   output$artwork <- renderImage({
+    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     artwork <- get_pokemon_art(pokemon_data$name[1], pokemon_data)
     tmpfile <- tempfile(fileext = ".png")
-    image_write(artwork, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 500, height = 500)
+    magick::image_write(artwork, tmpfile)
+    list(src = tmpfile, contentType = "image/png", width = 300, height = 300)
   }, deleteFile = TRUE)
 }
 
-# Run the app
+# Run the Shiny App
 shinyApp(ui = ui, server = server)
-
-
-
