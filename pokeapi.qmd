@@ -155,7 +155,7 @@ save_pokemon_data <- function(num_pokemon) {
   pokemon_data <- fetch_pokemon_attributes(num_pokemon)
   
   # Write data to the database (append if the table exists)
-  dbWriteTable(conn, "pokemon", pokemon_data, append = TRUE, row.names = FALSE)
+  dbWriteTable(conn, "pokemon", pokemon_data, overwrite = TRUE, append = FALSE, row.names = FALSE)
   
   # Disconnect from the database
   dbDisconnect(conn)
@@ -165,6 +165,22 @@ save_pokemon_data <- function(num_pokemon) {
 ```{r}
 # Save the first 151 Pokémon data to the database
 save_pokemon_data(151)
+
+```
+
+
+```{r}
+conn <- dbConnect(RSQLite::SQLite(), db_path)
+
+# Query: Fetch all data for "Bulbasaur"
+query <- "SELECT * FROM pokemon WHERE name = 'Bulbasaur';"
+bulbasaur_data <- dbGetQuery(conn, query)
+
+# Print the result
+print(bulbasaur_data)
+
+# Disconnect from the database
+dbDisconnect(conn)
 
 ```
 
