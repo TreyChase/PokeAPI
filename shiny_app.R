@@ -1,12 +1,8 @@
-# Required Libraries
 library(shiny)
 library(DBI)
 library(RSQLite)
 library(magick)
 library(dplyr)
-
-# Source the QMD file to access plot_base_stats
-source(knitr::purl("pokeapi.qmd", output = tempfile(), quiet = TRUE))
 
 # Database path
 db_path <- "pokemon_data.sqlite"
@@ -19,23 +15,19 @@ ui <- fluidPage(
     sidebarPanel(
       selectizeInput(
         inputId = "pokemon",
-        label = "Select a Pokémon",
+        label = "Search and Select a Pokémon",
         choices = NULL, # Dynamically populated when the app starts
         selected = NULL,
         options = list(placeholder = "Type to search Pokémon by name")
-      ),
-      actionButton(inputId = "fetchButton", label = "Fetch Pokémon Info")
+      )
     ),
     mainPanel(
-      h4(textOutput("pokemonName"), align = "center"), # Subheader for Pokémon name
       fluidRow(
         column(
           width = 4,
           wellPanel(
-            div(
-              style = "display: flex; justify-content: center; align-items: center; height: 300px;",
-              imageOutput("artwork", width = "300px", height = "300px")
-            )
+            h3(textOutput("pokemonName")),
+            imageOutput("artwork")
           )
         ),
         column(
@@ -46,11 +38,8 @@ ui <- fluidPage(
       fluidRow(
         column(
           width = 12,
-          div(
-            h4("Sprites", align = "center"), # Centered header above sprites
-            style = "margin-bottom: 10px;"
-          ),
           wellPanel(
+            h4("Sprites"),
             fluidRow(
               column(
                 width = 6,
@@ -70,7 +59,7 @@ ui <- fluidPage(
 
 # Server Logic for the Shiny App
 server <- function(input, output, session) {
-  # Populate the dropdown menu with Pokémon names
+  # Populate the dropdown menu with Pokémon names from the local database
   observe({
     conn <- dbConnect(SQLite(), db_path)
     pokemon_choices <- dbGetQuery(conn, "SELECT name FROM pokemon ORDER BY id") %>%
@@ -85,60 +74,54 @@ server <- function(input, output, session) {
     )
   })
   
-  # Fetch Pokémon data dynamically based on the action button click
-  selected_pokemon_data <- eventReactive(input$fetchButton, {
+  # Fetch Pokémon data dynamically from the local database based on the selected name
+  selected_pokemon_data <- reactive({
     req(input$pokemon) # Ensure a Pokémon is selected
     conn <- dbConnect(SQLite(), db_path)
     pokemon_data <- dbGetQuery(conn, paste0("SELECT * FROM pokemon WHERE name = '", input$pokemon, "'"))
     dbDisconnect(conn)
+    validate(need(nrow(pokemon_data) > 0, "Pokémon data not found in the database."))
     return(pokemon_data)
   })
   
-  # Render the Pokémon's Name as a Subheader
+  # Render the Pokémon's Name
   output$pokemonName <- renderText({
-    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     pokemon_data$name[1]
   })
   
-  # Render the Base Stats Plot using plot_base_stats from .qmd
+  # Render the Base Stats Plot using plot_base_stats from the QMD helper function
   output$baseStatsPlot <- renderPlot({
-    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
     plot_base_stats(pokemon_data$name[1], pokemon_data)
   })
   
-  # Render the Regular Sprite
+  # Render the Regular Sprite from the local file path
   output$sprite <- renderImage({
-    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
-    sprite <- get_pokemon_sprite(pokemon_data$name[1], pokemon_data)
-    tmpfile <- tempfile(fileext = ".png")
-    magick::image_write(sprite, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 200, height = 200)
-  }, deleteFile = TRUE)
+    sprite_path <- pokemon_data$sprite_path[1] # Assuming `sprite_path` is a column in your database
+    validate(need(file.exists(sprite_path), "Sprite not found."))
+    list(src = sprite_path, contentType = "image/png", width = 200, height = 200)
+  }, deleteFile = FALSE)
   
-  # Render the Shiny Sprite
+  # Render the Shiny Sprite from the local file path
   output$shinySprite <- renderImage({
-    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
-    shiny_sprite <- get_pokemon_shiny_sprite(pokemon_data$name[1], pokemon_data)
-    tmpfile <- tempfile(fileext = ".png")
-    magick::image_write(shiny_sprite, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 200, height = 200)
-  }, deleteFile = TRUE)
+    shiny_sprite_path <- pokemon_data$shiny_sprite_path[1] # Assuming `shiny_sprite_path` is a column in your database
+    validate(need(file.exists(shiny_sprite_path), "Shiny sprite not found."))
+    list(src = shiny_sprite_path, contentType = "image/png", width = 200, height = 200)
+  }, deleteFile = FALSE)
   
-  # Render the Artwork
+  # Render the Artwork from the local file path
   output$artwork <- renderImage({
-    req(selected_pokemon_data())
     pokemon_data <- selected_pokemon_data()
-    artwork <- get_pokemon_art(pokemon_data$name[1], pokemon_data)
-    tmpfile <- tempfile(fileext = ".png")
-    magick::image_write(artwork, tmpfile)
-    list(src = tmpfile, contentType = "image/png", width = 300, height = 300)
-  }, deleteFile = TRUE)
+    artwork_path <- pokemon_data$artwork_path[1] # Assuming `artwork_path` is a column in your database
+    validate(need(file.exists(artwork_path), "Artwork not found."))
+    list(src = artwork_path, contentType = "image/png", width = 300, height = 300)
+  }, deleteFile = FALSE)
 }
-
 
 # Run the Shiny App
 shinyApp(ui = ui, server = server)
+
+

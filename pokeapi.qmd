@@ -265,34 +265,20 @@ plot_base_stats("Bulbasaur", pokemon_df)
 ### Pokemon Default Sprite
 
 ```{r render image function}
-get_pokemon_sprite <- function(pokemon, pokemon_data) {
-  # Extract sprite path or URL
-  pokemon_sprite <- pokemon_data |>
-    dplyr::filter(name == pokemon) |>
-    dplyr::select(sprite) |>
-    dplyr::pull()
-  
-  # Check if sprite is valid
-  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
-    stop("No sprite found for the specified Pokémon.")
-  }
-  
-  # Try to read the sprite
-  img <- tryCatch(
-    {
-      magick::image_read(pokemon_sprite)
-    },
-    error = function(e) {
-      stop("Failed to read the sprite. Check the file path or URL.")
-    }
-  )
-  
-  # Scale the image
-  scaled_img <- magick::image_scale(img, "500x500")
-  
-  return(scaled_img)
+get_pokemon_sprite <- function(pokemon_name, pokemon_data) {
+  tryCatch({
+    # Replace with actual API call to fetch the sprite
+    # Example using httr:
+    response <- httr::GET(paste0("https://pokeapi.co/api/v2/pokemon/", tolower(pokemon_name)))
+    httr::stop_for_status(response)
+    # Process the response and return the sprite
+    # Placeholder: replace with actual logic
+    magick::image_blank(width = 200, height = 200, color = "gray")
+  }, error = function(e) {
+    # Fallback to a placeholder image on error
+    magick::image_blank(width = 200, height = 200, color = "red")
+  })
 }
-
 ```
 
 
