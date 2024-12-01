@@ -72,6 +72,7 @@ library(dplyr)
 library(purrr)
 library(stringr)
 library(furrr) # For parallel processing
+library(future)
 
 # Function to fetch attributes for multiple Pokémon dynamically
 fetch_pokemon_attributes <- function(num_pokemon) {
@@ -136,10 +137,42 @@ pokemon_df
 ```{r}
 str(pokemon_df)
 ```
+## Saving Information to SQL
+
+```{r sql}
+library(DBI)
+library(RSQLite)
+
+# Database path
+db_path <- "pokemon_data.sqlite"
+
+# Function to save Pokémon data to the database
+save_pokemon_data <- function(num_pokemon) {
+  # Connect to the database
+  conn <- dbConnect(SQLite(), db_path)
+  
+  # Use the existing function to fetch Pokémon data
+  pokemon_data <- fetch_pokemon_attributes(num_pokemon)
+  
+  # Write data to the database (append if the table exists)
+  dbWriteTable(conn, "pokemon", pokemon_data, append = TRUE, row.names = FALSE)
+  
+  # Disconnect from the database
+  dbDisconnect(conn)
+}
+```
+
+```{r}
+# Save the first 151 Pokémon data to the database
+save_pokemon_data(151)
+
+```
 
 ## Base Stats
 
 ```{r plot base stats}
+library(tidyverse)
+
 plot_base_stats <- function(pokemon, pokemon_data) {
   # Filtering the dataset for the specified Pokémon and selecting base stats
   pokemon_stats <- pokemon_data |>
