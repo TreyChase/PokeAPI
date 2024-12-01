@@ -8,75 +8,6 @@ library(dplyr)
 # Source the QMD file to access plot_base_stats
 source(knitr::purl("pokeapi.qmd", output = tempfile(), quiet = TRUE))
 
-# Helper Function: Get Regular Sprite
-get_pokemon_sprite <- function(pokemon, pokemon_data) {
-  pokemon_sprite <- pokemon_data |>
-    filter(name == pokemon) |>
-    select(sprite) |>
-    pull()
-  
-  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
-    stop("No sprite found for the specified Pokémon.")
-  }
-  
-  img <- tryCatch(
-    {
-      magick::image_read(pokemon_sprite)
-    },
-    error = function(e) {
-      stop("Failed to read the sprite. Check the file path or URL.")
-    }
-  )
-  
-  magick::image_scale(img, "500x500")
-}
-
-# Helper Function: Get Shiny Sprite
-get_pokemon_shiny_sprite <- function(pokemon, pokemon_data) {
-  pokemon_sprite <- pokemon_data |>
-    filter(name == pokemon) |>
-    select(shiny_sprite) |>
-    pull()
-  
-  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
-    stop("No sprite found for the specified Pokémon.")
-  }
-  
-  img <- tryCatch(
-    {
-      magick::image_read(pokemon_sprite)
-    },
-    error = function(e) {
-      stop("Failed to read the sprite. Check the file path or URL.")
-    }
-  )
-  
-  magick::image_scale(img, "500x500")
-}
-
-# Helper Function: Get Official Artwork
-get_pokemon_art <- function(pokemon, pokemon_data) {
-  pokemon_art <- pokemon_data |>
-    filter(name == pokemon) |>
-    select(art) |>
-    pull()
-  
-  if (is.null(pokemon_art) || pokemon_art == "") {
-    stop("No artwork found for the specified Pokémon.")
-  }
-  
-  img <- tryCatch(
-    {
-      magick::image_read(pokemon_art)
-    },
-    error = function(e) {
-      stop("Failed to read the image. Check the file path or URL.")
-    }
-  )
-  
-  magick::image_scale(img, "500x500")
-}
-
 # Database path
 db_path <- "pokemon_data.sqlite"
 
@@ -88,7 +19,7 @@ ui <- fluidPage(
     sidebarPanel(
       selectizeInput(
         inputId = "pokemon",
-        label = "Search and Select a Pokémon",
+        label = "Select a Pokémon",
         choices = NULL, # Dynamically populated when the app starts
         selected = NULL,
         options = list(placeholder = "Type to search Pokémon by name")
@@ -207,6 +138,7 @@ server <- function(input, output, session) {
     list(src = tmpfile, contentType = "image/png", width = 300, height = 300)
   }, deleteFile = TRUE)
 }
+
 
 # Run the Shiny App
 shinyApp(ui = ui, server = server)

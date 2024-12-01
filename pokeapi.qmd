@@ -250,7 +250,7 @@ plot_base_stats <- function(pokemon, pokemon_data) {
       limits = c(0, 300), # Fixed x-axis scale to a maximum of 300
       expand = c(0, 0) # Remove extra padding
     ) +
-    theme_minimal() +
+    theme_void() +
     theme(plot.title = element_text(face = "bold"))
   
   return(plt)
