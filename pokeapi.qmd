@@ -140,10 +140,6 @@ str(pokemon_df)
 ## Base Stats
 
 ```{r plot base stats}
-library(ggplot2)
-library(tidyr)
-library(dplyr)
-
 plot_base_stats <- function(pokemon, pokemon_data) {
   # Filtering the dataset for the specified Pokémon and selecting base stats
   pokemon_stats <- pokemon_data |>
@@ -167,16 +163,17 @@ plot_base_stats <- function(pokemon, pokemon_data) {
       fill_color = case_when(
         value <= 50 ~ "red",
         value > 50 & value <= 75 ~ "darkorange",
-        value > 75 & value < 100 ~ "greenyellow",
-        value >= 100 & value <= 150 ~ "green",
-        value > 150 ~ "cyan"
+        value > 75 & value < 100 ~ "darkgoldenrod1",
+        value >= 100 & value < 125 ~ "yellowgreen",
+        value >= 125 & value < 180 ~ "green",
+        value >= 180 ~ "cyan"
       )
     )
   
   # Creating the plot
   plt <- ggplot(stats_longer, aes(
     x = value, 
-    y = factor(stat, levels = rev(c("attack", "defense", "special_attack", "special_defense", "speed"))), 
+    y = factor(stat, levels = rev(unique(stat))), # Avoid using $ notation
     fill = fill_color # Map the fill color here
   )) + 
     geom_bar(stat = "identity") +
@@ -184,30 +181,133 @@ plot_base_stats <- function(pokemon, pokemon_data) {
     scale_fill_identity() + # Use identity scale to apply custom colors
     labs(
       title = paste("Base Stats for", pokemon),
-      x = "Base Stat Value"
+      x = "Base Stat Value",
+      y = NULL
     ) + 
+    scale_y_discrete(labels = c(
+      "attack" = "Attack",
+      "defense" = "Defense",
+      "special_attack" = "Sp. Atk.",
+      "special_defense" = "Sp. Def.",
+      "speed" = "Speed"
+    )) +
+    scale_x_continuous(
+      limits = c(0, max(stats_longer$value) * 1.1), # Set dynamic limits
+      expand = c(0, 0) # Remove extra padding
+    ) +
     theme_minimal() +
     theme(plot.title = element_text(face = "bold"))
   
   return(plt)
 }
 
-# Example Pokémon data
-pokemon_df <- tibble(
-  name = c("Bulbasaur", "Charmander"),
-  attack = c(49, 52),
-  defense = c(49, 43),
-  special_attack = c(65, 60),
-  special_defense = c(65, 50),
-  speed = c(45, 65)
-)
-
-# Plot base stats for Bulbasaur
 plot_base_stats("Bulbasaur", pokemon_df)
+```
 
+## Render Pokemon Images
+
+### Pokemon Default Sprite
+
+```{r render image function}
+get_pokemon_sprite <- function(pokemon, pokemon_data) {
+  # Extract sprite path or URL
+  pokemon_sprite <- pokemon_data |>
+    dplyr::filter(name == pokemon) |>
+    dplyr::select(sprite) |>
+    dplyr::pull()
+  
+  # Check if sprite is valid
+  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
+    stop("No sprite found for the specified Pokémon.")
+  }
+  
+  # Try to read the sprite
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_sprite)
+    },
+    error = function(e) {
+      stop("Failed to read the sprite. Check the file path or URL.")
+    }
+  )
+  
+  # Scale the image
+  scaled_img <- magick::image_scale(img, "500x500")
+  
+  return(scaled_img)
+}
 
 ```
 
 
+### Pokemon Shiny Sprite
 
+```{r shiny sprite}
+get_pokemon_shiny_sprite <- function(pokemon, pokemon_data) {
+  # Extract sprite path or URL
+  pokemon_sprite <- pokemon_data |>
+    dplyr::filter(name == pokemon) |>
+    dplyr::select(shiny_sprite) |>
+    dplyr::pull()
+  
+  # Check if sprite is valid
+  if (is.null(pokemon_sprite) || pokemon_sprite == "") {
+    stop("No sprite found for the specified Pokémon.")
+  }
+  
+  # Try to read the sprite
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_sprite)
+    },
+    error = function(e) {
+      stop("Failed to read the sprite. Check the file path or URL.")
+    }
+  )
+  
+  # Scale the image
+  scaled_img <- magick::image_scale(img, "500x500")
+  
+  return(scaled_img)
+}
+
+```
+
+
+### Pokemon Official Artwork
+
+```{r official artwork}
+get_pokemon_art <- function(pokemon, pokemon_data) {
+  # Extract sprite path or URL
+  pokemon_art <- pokemon_data |>
+    dplyr::filter(name == pokemon) |>
+    dplyr::select(art) |>
+    dplyr::pull()
+  
+  # Check if sprite is valid
+  if (is.null(pokemon_art) || pokemon_art == "") {
+    stop("No artwork found for the specified Pokémon.")
+  }
+  
+  # Try to read the sprite
+  img <- tryCatch(
+    {
+      magick::image_read(pokemon_art)
+    },
+    error = function(e) {
+      stop("Failed to read the image. Check the file path or URL.")
+    }
+  )
+  
+  # Scale the image
+  scaled_img <- magick::image_scale(img, "500x500")
+  
+  return(scaled_img)
+}
+
+```
+
+```{r}
+get_pokemon_art("Bulbasaur", pokemon_df)
+```
 
