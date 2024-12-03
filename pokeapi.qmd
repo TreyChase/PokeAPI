@@ -168,6 +168,8 @@ save_pokemon_data <- function(num_pokemon) {
 }
 ```
 
+
+
 ```{r}
 # Save the first 151 Pokémon data to the database
 save_pokemon_data(151)
