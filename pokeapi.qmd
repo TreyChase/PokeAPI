@@ -12,7 +12,126 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
+
+
 # Scraping from PokeAPI
+
+##Getting One Pokemon
+
+```{r}
+library(httr)
+
+# Define a function to fetch JSON data for a given Pokémon
+get_pokemon_data <- function(pokemon_name) {
+  # Construct the URL
+  base_url <- "https://pokeapi.co/api/v2/pokemon/"
+  url <- paste0(base_url, pokemon_name)
+  
+  # Make the GET request
+  response <- GET(url)
+  
+  # Check if the request was successful
+  if (status_code(response) == 200) {
+    # Parse the response as JSON
+    content <- content(response, as = "text")
+    json_data <- jsonlite::fromJSON(content, flatten = TRUE)
+    return(json_data)
+  } else {
+    stop("Failed to fetch data: ", status_code(response))
+  }
+}
+
+# Example usage
+bulbasaur_data <- get_pokemon_data("bulbasaur")
+print(bulbasaur_data)
+
+```
+
+
+```{r}
+get_pokemon_moveset <- function(pokemon_name) {
+  library(dplyr)
+  library(httr)
+  library(jsonlite)
+  
+  # Ensure the Pokémon name is in lowercase
+  pokemon_name <- tolower(pokemon_name)
+  
+  # Construct the URL
+  base_url <- "https://pokeapi.co/api/v2/pokemon/"
+  url <- paste0(base_url, pokemon_name)
+  
+  # Make the GET request
+  response <- GET(url)
+  
+  # Check if the request was successful
+  if (status_code(response) == 200) {
+    # Parse the response as JSON
+    content <- content(response, as = "text")
+    json_data <- fromJSON(content, flatten = TRUE)
+    
+    # Extract the moveset
+    if ("moves" %in% names(json_data)) {
+      moves <- json_data$moves %>%
+        pluck("move.url") %>%
+        map_df(~ tryCatch({
+          move_response <- GET(.x)
+          if (status_code(move_response) == 200) {
+            move_content <- content(move_response, as = "text")
+            move_data <- fromJSON(move_content, flatten = TRUE)
+            
+            tibble(
+              Move = tools::toTitleCase(move_data$name),
+              Type = tools::toTitleCase(move_data$type$name),
+              BP = ifelse(is.null(move_data$power), NA_integer_, move_data$power), # Handle missing power as NA
+              Description = move_data$flavor_text_entries %>%
+                filter(language.name == "en") %>%
+                slice(1) %>%
+                pull(flavor_text) %>%
+                stringr::str_replace_all("\n", " ") # Clean up line breaks
+            )
+          } else {
+            tibble(
+              Move = "N/A",
+              Type = "N/A",
+              BP = NA_integer_,
+              Description = "N/A"
+            )
+          }
+        }, error = function(e) {
+          tibble(
+            Move = "Error",
+            Type = "Error",
+            BP = NA_integer_,
+            Description = "Error"
+          )
+        }))
+      
+      return(moves %>% arrange(Move)) # Alphabetize the moves
+    } else {
+      stop("Moveset not found in the response.")
+    }
+  } else {
+    stop(paste("Failed to fetch data: HTTP", status_code(response)))
+  }
+}
+
+
+```
+
+## Type Colors
+
+```{r type colors}
+type_colors <- c(
+  Normal = "#A8A77A", Fire = "#EE8130", Water = "#6390F0",
+  Electric = "#F7D02C", Grass = "#7AC74C", Ice = "#96D9D6",
+  Fighting = "#C22E28", Poison = "#A33EA1", Ground = "#E2BF65",
+  Flying = "#A98FF3", Psychic = "#F95587", Bug = "#A6B91A",
+  Rock = "#B6A136", Ghost = "#735797", Dragon = "#6F35FC",
+  Dark = "#705746", Steel = "#B7B7CE", Fairy = "#D685AD"
+)
+```
+
 
 ```{r fetch data}
 library(httr2)
@@ -134,61 +253,25 @@ fetch_pokemon_attributes <- function(num_pokemon) {
 
 
 ```{r}
-pokemon_df = fetch_pokemon_attributes(20)
+pokemon_df = fetch_pokemon_attributes(151)
 
 pokemon_df
 ```
 
 ```{r}
-str(pokemon_df)
-```
-## Saving Information to SQL
-
-```{r sql}
 library(DBI)
-library(RSQLite)
-library(future)
+library(duckdb)
+library(dplyr)
 
-# Database path
-db_path <- "pokemon_data.sqlite"
+# Connect to DuckDB
+db_path <- "pokemon_data.duckdb"
+con <- dbConnect(duckdb(), db_path)
 
-# Function to save Pokémon data to the database
-save_pokemon_data <- function(num_pokemon) {
-  # Connect to the database
-  conn <- dbConnect(SQLite(), db_path)
-  
-  # Use the existing function to fetch Pokémon data
-  pokemon_data <- fetch_pokemon_attributes(num_pokemon)
-  
-  # Write data to the database (append if the table exists)
-  dbWriteTable(conn, "pokemon", pokemon_data, overwrite = TRUE, append = FALSE, row.names = FALSE)
-  
-  # Disconnect from the database
-  dbDisconnect(conn)
-}
-```
+# Write data to DuckDB
+dbWriteTable(con, "pokemon", pokemon_df, overwrite = TRUE)
 
-
-
-```{r}
-# Save the first 151 Pokémon data to the database
-save_pokemon_data(151)
-
-```
-
-
-```{r}
-conn <- dbConnect(RSQLite::SQLite(), db_path)
-
-# Query: Fetch all data for "Bulbasaur"
-query <- "SELECT * FROM pokemon WHERE name = 'Bulbasaur';"
-bulbasaur_data <- dbGetQuery(conn, query)
-
-# Print the result
-print(bulbasaur_data)
-
-# Disconnect from the database
-dbDisconnect(conn)
+# Disconnect from DuckDB
+dbDisconnect(con)
 
 ```
 
@@ -233,7 +316,7 @@ plot_base_stats <- function(pokemon, pokemon_data) {
     y = factor(stat, levels = rev(unique(stat))), # Avoid using $ notation
     fill = fill_color # Map the fill color here
   )) + 
-    geom_bar(stat = "identity") +
+    geom_bar(stat = "identity", width = 0.1) +
     geom_text(aes(label = value), hjust = -0.1, fontface = "bold") +
     scale_fill_identity() + # Use identity scale to apply custom colors
     labs(
